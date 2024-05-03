@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>ふわっちデイリーランキングチェッカー</title>
+
+	<script
+	  src="https://code.jquery.com/jquery-3.7.1.slim.min.js"
+	  integrity="sha256-kmHvs0B+OpCW5GVHUNjv9rOmY0IvSIRcf7zGUDTDQM8="
+	  crossorigin="anonymous"></script>
+
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.30.1/moment-with-locales.min.js" integrity="sha512-4F1cxYdMiAW98oomSLaygEwmCnIP38pb4Kx70yQYqRwLVCs3DbRumfBq82T08g/4LJ/smbFGFpmeFlQgoDccgg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+
+	<link
+	  rel="stylesheet"
+	  href="https://cdn.jsdelivr.net/npm/bulma@1.0.0/css/bulma.min.css"
+	>
+	<style>
+		body {
+			padding: 10px;
+		}
+
+		#res_icon_url{
+			width: 120px;
+			height: auto;
+		}
+	</style>
+</head>
+<body>
+	<div class="box">
+		<div class="field">
+			<label class="label">日付</label>
+
+			<input type="date" class="control" min="2015-01-01" id="date" />
+
+			<button class="button is-dark is-size-7" id="preset_yesterday">昨日</button>
+			<button class="button is-dark is-size-7" id="preset_today">今日</button>
+		</div>
+
+		<div class="field">
+			<label class="label">limit</label>
+			<div class="control">
+				<input class="input" type="text" placeholder="10000" value="10000" id="limit" />
+			</div>
+		</div>
+
+		<button class="button is-primary" id="open_api">ふわっちAPIを開く(別ウィンドウで開きます)</button>
+	</div>
+
+	<div class="box">
+		<div class="field">
+			<label class="label">ふわっちAPIのjsonペースト先</label>
+
+			<textarea class="textarea" placeholder="(ここにコピペしてください)" id="api_res_json"></textarea>
+		</div>
+
+		<div class="field">
+			<label class="label">ユーザーID</label>
+			<div class="control">
+				<input class="input" type="text" placeholder="12345" value="51677349" id="user_id" />
+			</div>
+		</div>
+
+		<button class="button is-primary" id="get_user">抽出</button>
+	</div>
+
+	<div class="box">
+		<div class="field">
+
+			<div class="has-text-warning" id="warning_message"></div>
+			<div class="has-text-danger" id="error_message"></div>
+
+
+			<table class="table is-hoverable">
+				<tbody>
+					<tr>
+						<th>ユーザーID</th>
+						<td><div id="res_user_id"/></td>
+					</tr>
+
+					<tr>
+						<th>ユーザー名</th>
+						<td><div id="res_user_name"/></td>
+					</tr>
+
+					<tr>
+						<th>icon</th>
+						<td>
+							<img
+								id="res_icon_url"
+								src=""
+								referrerpolicy="no-referrer"
+							/>
+						</td>
+					</tr>
+					<tr>
+						<th>デイリーランク</th>
+						<td
+							class="has-text-right"
+						><div id="res_rank"/></td>
+					</tr>
+					<tr>
+						<th>獲得ポイント</th>
+						<td
+							class="has-text-right"
+						><div id="res_point"/></td>
+					</tr>
+					<tr>
+						<th>総視聴者数</th>
+						<td
+							class="has-text-right"
+						><div id="res_total_view_count"/></td>
+					</tr>
+				</tbody>
+			</table>
+		</div>
+	</div>
+
+	<script>
+	$(function() {
+		$('#preset_yesterday').on('click', function () {
+			$("#date").val(
+					moment().subtract(1, "days").format('YYYY-MM-DD')
+			)
+		});
+		$('#preset_today').on('click', function () {
+			$("#date").val(
+					moment().subtract(0, "days").format('YYYY-MM-DD')
+			)
+		});
+
+
+		$('#open_api').on('click', function () {
+			const ret = $("#date").val().match(/([0-9]{4})-([0-9]{2})-([0-9]{2})/);
+			const ymd = `${ret[1]}${ret[2]}${ret[3]}`
+			const limit = $("#limit").val()
+			const url = `https://api.whowatch.tv/rankings/daily/${ymd}?limit=${limit}`;
+			window.open(url);
+		});
+
+		$('#get_user').on('click', function () {
+			try {
+				$("#warning_message").html("")
+				$("#error_message").html("")
+				$("#res_user_id").html("")
+				$("#res_user_name").html("")
+				$("#res_icon_url").attr("src", "")
+				$("#res_point").html("")
+				$("#res_rank").html("")
+				$("#res_total_view_count").html("")
+
+				const api_res = $("#api_res_json").val()
+				const user_id = $("#user_id").val()
+
+				const data = JSON.parse(api_res)
+
+				// デイリーランキングを抽出
+				const dailyRanking = data.find(row => {
+					return row?.short_name === "デイリー"
+				})?.rankings
+
+				// 特定のユーザーIDを抽出
+				const user = (dailyRanking || []).map(row => {
+					if (user_id === String(row?.user?.id)) {
+						console.log(row)
+
+						return {
+							user_id: row?.user?.id,
+							user_name: row?.user?.name,
+							icon_url: row?.user?.icon_url,
+							point: row?.point,
+							rank: row?.rank,
+							total_view_count: row?.total_view_count,
+						}
+					}
+					return null
+				}).filter(Boolean)
+
+				const result = user.shift();
+
+				// 取得できなかった場合
+				if (!result) {
+					$("#warning_message").html("指定されたユーザーIDのデータが見つかりませんでした")
+					return
+				}
+
+				$("#res_user_id").html(result?.user_id)
+				$("#res_user_name").html(result?.user_name)
+				$("#res_icon_url").attr("src", result?.icon_url)
+				$("#res_point").html(result?.point)
+				$("#res_rank").html(result?.rank)
+				$("#res_total_view_count").html(result?.total_view_count)
+			} catch (e) {
+				$("#error_message").html(e.message)
+			}
+		});
+
+		$("#user_id,#api_res_json").on("change", () => {
+			handleChangeSection2()
+		})
+		$("#user_id,#api_res_json").on("keyup", () => {
+			handleChangeSection2()
+		})
+
+		const handleChangeSection2 = () => {
+			const setDisabled =
+				(
+					$("#user_id").val() == ""
+					||
+					$("#api_res_json").val() == ""
+				)
+
+			$("#get_user").attr("disabled", setDisabled)
+		}
+
+		// init
+		handleChangeSection2()
+		$("#date").val(
+				moment().subtract(1, "days").format('YYYY-MM-DD')
+		)
+		$("#date").attr(
+				"max",
+				moment().subtract(0, "days").format('YYYY-MM-DD')
+		)
+	});
+
+
+	</script>
+</body>
+</html>
